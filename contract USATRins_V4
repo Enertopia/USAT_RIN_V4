@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/security/PullPayment.sol";
+
+contract USATRins is Initializable, ERC721, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, PullPayment {
+    uint256 private totalRINs;
+    mapping(uint256 => RIN) private RINs;
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant USER_ROLE = keccak256("USER_ROLE");
+
+    struct RIN {
+        uint256 rinAssignmentCode;
+        uint256 yearBatch;
+        uint256 companyRegistrationId;
+        uint256 facilityRegistrationId;
+        uint256 batchNumber;
+        uint32 assetPrice;
+        uint8 usatScore;
+        MarketType market;
+    }
+
+    enum MarketType { Mandatory, OTC }
+
+    event RINRegistered(uint256 indexed rinId, uint256 rinAssignmentCode, uint256 yearBatch);
+    event AssetPriceUpdated(uint256 indexed rinId, uint32 newPrice);
+    event USATScoreUpdated(uint256 indexed rinId, uint8 newScore);
+
+    function initialize(string memory _name, string memory _symbol) public initializer {
+        __ERC721_init(_name, _symbol);
+        __AccessControl_init();
+        __Ownable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
+        __PullPayment_init();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(ADMIN_ROLE, msg.sender);
+        // Additional setup for USER_ROLE can be done as needed
+    }
+
+    modifier onlyAdmin() {
+        require(hasRole(ADMIN_ROLE, msg.sender), "USATRins: Must have admin role to perform this action");
+        _;
+    }
+
+    modifier onlyUser() {
+        require(hasRole(USER_ROLE, msg.sender), "USATRins: Must have user role to perform this action");
+        _;
+    }
+
+    function registerRIN(
+        uint256 rinAssignmentCode,
+        uint256 yearBatch,
+        uint256 companyRegistrationId,
+        uint256 facilityRegistrationId,
+        uint256 batchNumber,
+        uint32 assetPrice,
+        uint8 usatScore,
+        MarketType market
+    ) external onlyAdmin returns (uint256) {
+        uint256 newTokenId = totalRINs + 1;
+        totalRINs = newTokenId;
+
+        RINs[newTokenId] = RIN({
+            rinAssignmentCode: rinAssignmentCode,
+            yearBatch: yearBatch,
+            companyRegistrationId: companyRegistrationId,
+            facilityRegistrationId: facilityRegistrationId,
+            batchNumber: batchNumber,
+            assetPrice: assetPrice,
+            usatScore: usatScore,
+            market: market
+        });
+
+        emit RINRegistered(newTokenId, rinAssignmentCode, yearBatch);
+        return newTokenId;
+    }
+
+    function updatePrice(uint256 rinId, uint32 newPrice) external onlyAdmin {
+        require(rinId <= totalRINs, "USATRins: RIN does not exist");
+        RINs[rinId].assetPrice = newPrice;
+        emit AssetPriceUpdated(rinId, newPrice);
+    }
+
+    function updateUSATScore(uint256 rinId, uint8 newScore) external onlyAdmin {
+        require(rinId <= totalRINs, "USATRins: RIN does not exist");
+        RINs[rinId].usatScore = newScore;
+        emit USATScoreUpdated(rinId, newScore);
+    }
+
+    function getRIN(uint256 rinId) public view returns (RIN memory) {
+        require(rinId <= totalRINs, "USATRins: RIN does not exist");
+        return RINs[rinId];
+    }
+
+    // Other necessary functions and contract logic...
+}
