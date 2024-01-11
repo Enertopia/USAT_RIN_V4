@@ -1,0 +1,39 @@
+import React, { useState } from 'react';
+import { getRIN } from './web3Functions';
+
+function RINDetails() {
+    const [rinId, setRinId] = useState('');
+    const [rinDetails, setRinDetails] = useState(null);
+
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        try {
+            const details = await getRIN(rinId);
+            setRinDetails(details);
+        } catch (error) {
+            alert('Failed to Fetch RIN Details: ' + error.message);
+        }
+    };
+
+    return (
+        <div>
+            <h2>RIN Details</h2>
+            <form onSubmit={handleSearch}>
+                <input
+                    name="rinId"
+                    value={rinId}
+                    onChange={(e) => setRinId(e.target.value)}
+                    placeholder="RIN ID"
+                />
+                <button type="submit">Get Details</button>
+            </form>
+            {rinDetails && (
+                <div>
+                    {/* Display rinDetails fields */}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default RINDetails;
