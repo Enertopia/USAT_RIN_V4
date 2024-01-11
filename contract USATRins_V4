@@ -10,6 +10,8 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/PullPayment.sol";
 
 contract USATRins is Initializable, ERC721, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, PullPayment {
+    using SafeMath for uint256;
+
     uint256 private totalRINs;
     mapping(uint256 => RIN) private RINs;
 
@@ -43,7 +45,6 @@ contract USATRins is Initializable, ERC721, AccessControlUpgradeable, Reentrancy
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(ADMIN_ROLE, msg.sender);
-        // Additional setup for USER_ROLE can be done as needed
     }
 
     modifier onlyAdmin() {
@@ -51,32 +52,19 @@ contract USATRins is Initializable, ERC721, AccessControlUpgradeable, Reentrancy
         _;
     }
 
-    modifier onlyUser() {
-        require(hasRole(USER_ROLE, msg.sender), "USATRins: Must have user role to perform this action");
-        _;
-    }
-
     function registerRIN(
         uint256 rinAssignmentCode,
         uint256 yearBatch,
-        uint256 companyRegistrationId,
-        uint256 facilityRegistrationId,
-        uint256 batchNumber,
-        uint32 assetPrice,
-        uint8 usatScore,
+        // ... other parameters
         MarketType market
-    ) external onlyAdmin returns (uint256) {
-        uint256 newTokenId = totalRINs + 1;
+    ) external onlyAdmin whenNotPaused nonReentrant returns (uint256) {
+        uint256 newTokenId = totalRINs.add(1);
         totalRINs = newTokenId;
 
         RINs[newTokenId] = RIN({
             rinAssignmentCode: rinAssignmentCode,
             yearBatch: yearBatch,
-            companyRegistrationId: companyRegistrationId,
-            facilityRegistrationId: facilityRegistrationId,
-            batchNumber: batchNumber,
-            assetPrice: assetPrice,
-            usatScore: usatScore,
+            // ... other RIN data assignments
             market: market
         });
 
