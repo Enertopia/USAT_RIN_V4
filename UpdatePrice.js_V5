@@ -1,0 +1,24 @@
+import React, { useState } from 'react';
+import { Button, TextField } from '@material-ui/core';
+import { updatePrice } from '../web3Functions';
+
+function UpdatePrice() {
+    const [rinId, setRinId] = useState('');
+    const [newPrice, setNewPrice] = useState('');
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        await updatePrice(rinId, newPrice);
+        // Handle submission and response
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <TextField label="RIN ID" value={rinId} onChange={(e) => setRinId(e.target.value)} />
+            <TextField label="New Price" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} type="number" />
+            <Button type="submit">Update Price</Button>
+        </form>
+    );
+}
+
+export default UpdatePrice;
