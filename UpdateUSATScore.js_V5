@@ -1,0 +1,24 @@
+import React, { useState } from 'react';
+import { Button, TextField } from '@material-ui/core';
+import { updateUSATScore } from '../web3Functions';
+
+function UpdateUSATScore() {
+    const [rinId, setRinId] = useState('');
+    const [newScore, setNewScore] = useState('');
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        await updateUSATScore(rinId, newScore);
+        // Handle submission and response
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <TextField label="RIN ID" value={rinId} onChange={(e) => setRinId(e.target.value)} />
+            <TextField label="New USAT Score" value={newScore} onChange={(e) => setNewScore(e.target.value)} type="number" />
+            <Button type="submit">Update USAT Score</Button>
+        </form>
+    );
+}
+
+export default UpdateUSATScore;
