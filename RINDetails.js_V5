@@ -1,0 +1,27 @@
+import React, { useState } from 'react';
+import { Button, TextField } from '@material-ui/core';
+import { getRINDetails } from '../web3Functions';
+
+function RINDetails() {
+    const [rinId, setRinId] = useState('');
+    const [details, setDetails] = useState(null);
+
+    const handleSearch = async () => {
+        const rinDetails = await getRINDetails(rinId);
+        setDetails(rinDetails);
+    };
+
+    return (
+        <div>
+            <TextField label="RIN ID" value={rinId} onChange={(e) => setRinId(e.target.value)} />
+            <Button onClick={handleSearch}>Get RIN Details</Button>
+            {details && (
+                <div>
+                    {/* Render RIN details */}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default RINDetails;
