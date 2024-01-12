@@ -1,0 +1,40 @@
+import React, { useState } from 'react';
+import { Button, TextField, FormControl, InputLabel, Select, MenuItem } from '@material-ui/core';
+import { registerRINOnChain } from '../web3Functions';
+
+function RegisterRIN() {
+    const [rinData, setRinData] = useState({
+        yearBatch: '',
+        assetPrice: '',
+        usatScore: '',
+        market: 'Mandatory',
+    });
+
+    const handleChange = (event) => {
+        setRinData({ ...rinData, [event.target.name]: event.target.value });
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        await registerRINOnChain(rinData);
+        // Handle submission and response
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <TextField label="Year Batch" name="yearBatch" onChange={handleChange} />
+            <TextField label="Asset Price" name="assetPrice" type="number" onChange={handleChange} />
+            <TextField label="USAT Score" name="usatScore" type="number" onChange={handleChange} />
+            <FormControl>
+                <InputLabel>Market</InputLabel>
+                <Select name="market" value={rinData.market} onChange={handleChange}>
+                    <MenuItem value="Mandatory">Mandatory</MenuItem>
+                    <MenuItem value="OTC">OTC</MenuItem>
+                </Select>
+            </FormControl>
+            <Button type="submit">Register RIN</Button>
+        </form>
+    );
+}
+
+export default RegisterRIN;
