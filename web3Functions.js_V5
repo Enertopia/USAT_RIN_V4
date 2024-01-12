@@ -1,0 +1,31 @@
+import Web3 from 'web3';
+import USATRinsABI from './USATRinsABI.json'; // Make sure the ABI file is correctly imported
+
+const web3 = new Web3(Web3.givenProvider || 'http://localhost:8545');
+const contractAddress = 'YOUR_CONTRACT_ADDRESS'; // Replace with your contract address
+const usatRinsContract = new web3.eth.Contract(USATRinsABI, contractAddress);
+
+export const registerRIN = async (rinData) => {
+    const accounts = await web3.eth.getAccounts();
+    return usatRinsContract.methods.registerRIN(
+        rinData.yearBatch,
+        rinData.assetPrice,
+        rinData.usatScore,
+        rinData.market
+        // ... other parameters as needed
+    ).send({ from: accounts[0] });
+};
+
+export const updatePrice = async (rinId, newPrice) => {
+    const accounts = await web3.eth.getAccounts();
+    return usatRinsContract.methods.updatePrice(rinId, newPrice).send({ from: accounts[0] });
+};
+
+export const updateUSATScore = async (rinId, newScore) => {
+    const accounts = await web3.eth.getAccounts();
+    return usatRinsContract.methods.updateUSATScore(rinId, newScore).send({ from: accounts[0] });
+};
+
+export const getRINDetails = async (rinId) => {
+    return usatRinsContract.methods.getRINDetails(rinId).call();
+};
