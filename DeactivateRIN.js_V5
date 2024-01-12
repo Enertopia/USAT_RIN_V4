@@ -1,0 +1,26 @@
+import React, { useState } from 'react';
+import { Button, TextField } from '@material-ui/core';
+import { deactivateRIN } from './web3Functions';
+
+function DeactivateRIN() {
+    const [rinId, setRinId] = useState('');
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        await deactivateRIN(rinId);
+        // Handle the response or errors
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <TextField
+                label="RIN ID"
+                value={rinId}
+                onChange={(e) => setRinId(e.target.value)}
+            />
+            <Button type="submit">Deactivate RIN</Button>
+        </form>
+    );
+}
+
+export default DeactivateRIN;
