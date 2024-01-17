@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+
+/**
+ * @title RINRegistration
+ * @dev ERC-721 contract for managing Renewable Identification Numbers (RINs).
+ *      Supports registering pre-existing RINs, transferring, and retiring tokens.
+ */
+contract RINRegistration is Initializable, ERC721URIStorageUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
+    using StringsUpgradeable for uint256;
+
+    uint256 private _tokenIds;
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant RETIRER_ROLE = keccak256("RETIRER_ROLE");
+
+    mapping(uint256 => string) private _rinNumbers;
+    mapping(string => uint256) private _numberToTokenId; // To ensure uniqueness of RIN numbers
+
+    event RINRegistered(uint256 indexed tokenId, string rinNumber, address indexed to);
+    event RINRetired(uint256 indexed tokenId);
+
+    function initialize() external initializer {
+        __ERC721URIStorage_init("USAT RIN", "RIN");
+        __Ownable_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
+        __AccessControl_init();
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(MINTER_ROLE, msg.sender);
+        _setupRole(PAUSER_ROLE, msg.sender);
+        _setupRole(RETIRER_ROLE, msg.sender);
+    }
+
+    function registerRIN(string memory rinNumber, string memory tokenURI, address to) public onlyRole(MINTER_ROLE) whenNotPaused nonReentrant {
+        require(to != address(0), "RINRegistration: Mint to the zero address");
+        require(_numberToTokenId[rinNumber] == 0, "RINRegistration: RIN number already registered");
+
+        _tokenIds++;
+        uint256 newTokenId = _tokenIds;
+        _mint(to, newTokenId);
+        _setTokenURI(newTokenId, tokenURI);
+        _rinNumbers[newTokenId] = rinNumber;
+        _numberToTokenId[rinNumber] = newTokenId;
+
+        emit RINRegistered(newTokenId, rinNumber, to);
+    }
+
+    function getRINNumber(uint256 tokenId) public view returns (string memory) {
+        require(_exists(tokenId), "RINRegistration: Query for nonexistent token");
+        return _rinNumbers[tokenId];
+    }
+
+    function retireRIN(uint256 tokenId) public onlyRole(RETIRER_ROLE) {
+        require(_exists(tokenId), "RINRegistration: Retire non-existent token");
+        string memory rinNumber = _rinNumbers[tokenId];
+        delete _numberToTokenId[rinNumber];
+        _burn(tokenId);
+        emit RINRetired(tokenId);
+    }
+
+    function pause() public onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+
+    // Versioning and upgradeability considerations here
+
+    // Additional security checks and utility functions can be implemented here
+
+    // Comprehensive testing and documentation are essential
+}
+
