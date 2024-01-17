@@ -1,82 +1,136 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 
-/**
- * @title RINRegistration
- * @dev ERC-721 contract for managing Renewable Identification Numbers (RINs).
- *      Supports registering pre-existing RINs, transferring, and retiring tokens.
- */
-contract RINRegistration is Initializable, ERC721URIStorageUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
-    using StringsUpgradeable for uint256;
+contract RINRegistration is AccessControlUpgradeable, PausableUpgradeable {
+    using SafeMathUpgradeable for uint256;
 
-    uint256 private _tokenIds;
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant RETIRER_ROLE = keccak256("RETIRER_ROLE");
+    // Define roles
+    bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
+    bytes32 public constant APPROVER_ROLE = keccak256("APPROVER_ROLE");
 
-    mapping(uint256 => string) private _rinNumbers;
-    mapping(string => uint256) private _numberToTokenId; // To ensure uniqueness of RIN numbers
+    struct Company {
+        string name;
+        address owner;
+        bool isApproved;
+    }
 
-    event RINRegistered(uint256 indexed tokenId, string rinNumber, address indexed to);
-    event RINRetired(uint256 indexed tokenId);
+    struct Facility {
+        string name;
+        uint256 companyId;
+        bool isApproved;
+    }
 
-    function initialize() external initializer {
-        __ERC721URIStorage_init("USAT RIN", "RIN");
-        __Ownable_init();
-        __Pausable_init();
-        __ReentrancyGuard_init();
+    struct Agent {
+        string name;
+        address agentAddress;
+        uint256 companyId;
+        bool isApproved;
+    }
+
+    struct RIN {
+        uint8 kCode;
+        uint16 year;
+        uint16 companyID;
+        uint16 facilityID;
+        uint32 batchNumber;
+        uint8 equivalenceCode;
+        uint8 renewableFuelCategory;
+        uint64 startBlock;
+        uint64 endBlock;
+    }
+
+    mapping(uint256 => Company) public companies;
+    mapping(uint256 => Facility) public facilities;
+    mapping(address => Agent) public agents;
+
+    uint256 private _companyIds;
+    uint256 private _facilityIds;
+    uint256 private _version;
+
+    event CompanyRegistered(uint256 indexed companyId, string name, address owner);
+    event FacilityRegistered(uint256 indexed facilityId, string name, uint256 companyId);
+    event AgentRegistered(address indexed agentAddress, string name, uint256 companyId);
+    event CompanyApproved(uint256 indexed companyId);
+    event FacilityApproved(uint256 indexed facilityId);
+    event AgentApproved(address indexed agentAddress);
+
+    function initialize() public initializer {
         __AccessControl_init();
+        __Pausable_init();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _setupRole(MINTER_ROLE, msg.sender);
-        _setupRole(PAUSER_ROLE, msg.sender);
-        _setupRole(RETIRER_ROLE, msg.sender);
+        _setupRole(REGISTRAR_ROLE, msg.sender);
+        _setupRole(APPROVER_ROLE, msg.sender);
+        _companyIds = 0;
+        _facilityIds = 0;
+        _version = 1;
     }
 
-    function registerRIN(string memory rinNumber, string memory tokenURI, address to) public onlyRole(MINTER_ROLE) whenNotPaused nonReentrant {
-        require(to != address(0), "RINRegistration: Mint to the zero address");
-        require(_numberToTokenId[rinNumber] == 0, "RINRegistration: RIN number already registered");
-
-        _tokenIds++;
-        uint256 newTokenId = _tokenIds;
-        _mint(to, newTokenId);
-        _setTokenURI(newTokenId, tokenURI);
-        _rinNumbers[newTokenId] = rinNumber;
-        _numberToTokenId[rinNumber] = newTokenId;
-
-        emit RINRegistered(newTokenId, rinNumber, to);
+    function registerCompany(string memory name) public onlyRole(REGISTRAR_ROLE) {
+        require(bytes(name).length > 0, "Invalid company name");
+        _companyIds = _companyIds.add(1);
+        companies[_companyIds] = Company(name, msg.sender, false);
+        emit CompanyRegistered(_companyIds, name, msg.sender);
     }
 
-    function getRINNumber(uint256 tokenId) public view returns (string memory) {
-        require(_exists(tokenId), "RINRegistration: Query for nonexistent token");
-        return _rinNumbers[tokenId];
+    function approveCompany(uint256 companyId) public onlyRole(APPROVER_ROLE) {
+        require(!companies[companyId].isApproved, "Company already approved");
+        companies[companyId].isApproved = true;
+        emit CompanyApproved(companyId);
     }
 
-    function retireRIN(uint256 tokenId) public onlyRole(RETIRER_ROLE) {
-        require(_exists(tokenId), "RINRegistration: Retire non-existent token");
-        string memory rinNumber = _rinNumbers[tokenId];
-        delete _numberToTokenId[rinNumber];
-        _burn(tokenId);
-        emit RINRetired(tokenId);
+    function registerFacility(string memory name, uint256 companyId) public onlyRole(REGISTRAR_ROLE) {
+        require(bytes(name).length > 0, "Invalid facility name");
+        require(companies[companyId].owner == msg.sender, "Not the company owner");
+        _facilityIds = _facilityIds.add(1);
+        facilities[_facilityIds] = Facility(name, companyId, false);
+        emit FacilityRegistered(_facilityIds, name, companyId);
     }
 
-    function pause() public onlyRole(PAUSER_ROLE) {
+    function approveFacility(uint256 facilityId) public onlyRole(APPROVER_ROLE) {
+        require(!facilities[facilityId].isApproved, "Facility already approved");
+        facilities[facilityId].isApproved = true;
+        emit FacilityApproved(facilityId);
+    }
+
+    function registerAgent(string memory name, uint256 companyId) public onlyRole(REGISTRAR_ROLE) {
+        require(bytes(name).length > 0, "Invalid agent name");
+        require(companies[companyId].owner == msg.sender, "Not the company owner");
+        agents[msg.sender] = Agent(name, msg.sender, companyId, false);
+        emit AgentRegistered(msg.sender, name, companyId);
+    }
+
+    function approveAgent(address agentAddress) public onlyRole(APPROVER_ROLE) {
+        require(!agents[agentAddress].isApproved, "Agent already approved");
+        agents[agentAddress].isApproved = true;
+        emit AgentApproved(agentAddress);
+    }
+
+    function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
         _pause();
     }
 
-    function unpause() public onlyRole(PAUSER_ROLE) {
+    function unpause() public onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 
-    // Versioning and upgradeability considerations here
+    function parseRIN(uint256 tokenId) public pure returns (RIN memory) {
+        // Logic to extract RIN components from tokenId
+        RIN memory rin;
+        // Assign values to rin struct
+        return rin;
+    }
 
-    // Additional security checks and utility functions can be implemented here
+    function validateRIN(RIN memory rin) public pure returns (bool) {
+        // Implement validation logic based on RIN structure
+    }
 
-    // Comprehensive testing and documentation are essential
+    function getVersion() public view returns (uint256) {
+        return _version;
+    }
+
+    // Additional functions for role management, upgradeability, and data validation
 }
-
