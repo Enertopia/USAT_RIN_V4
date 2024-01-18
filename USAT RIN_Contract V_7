@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+
+/**
+ * @title RINRegistration
+ * @dev Manages the registration and approval of Renewable Identification Numbers (RINs) as NFTs.
+ * Inherits ERC721 for NFT functionality, AccessControl for role management, Pausable for pausing the contract, and ReentrancyGuard for preventing reentrancy attacks.
+ */
+contract RINRegistration is Initializable, ERC721Upgradeable, ERC721URIStorageUpgradeable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+    using StringsUpgradeable for uint256;
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+    using SafeMathUpgradeable for uint256;
+
+    bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
+    bytes32 public constant APPROVER_ROLE = keccak256("APPROVER_ROLE");
+
+    struct RIN {
+        uint256 tokenId;
+        string rinNumber;
+        bytes32 fileHash;
+    }
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+    mapping(string => uint256) private _rinNumberToTokenId;
+    mapping(uint256 => RIN) private _tokenDetails;
+
+    event RINRegistered(uint256 indexed tokenId, string rinNumber, bytes32 fileHash);
+    event RINApproved(uint256 indexed tokenId);
+
+    function initialize() public initializer {
+        __ERC721_init("USAT RIN", "RIN");
+        __ERC721URIStorage_init();
+        __AccessControl_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(REGISTRAR_ROLE, msg.sender);
+        _setupRole(APPROVER_ROLE, msg.sender);
+
+        _tokenIdCounter.reset();
+    }
+
+    function registerRIN(string memory rinNumber, string memory metadataURI, bytes32 fileHash) public onlyRole(REGISTRAR_ROLE) nonReentrant {
+        require(_rinNumberToTokenId[rinNumber] == 0, "RINRegistration: RIN already registered");
+        require(validateRINData(rinNumber), "RINRegistration: Invalid RIN data");
+
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        _rinNumberToTokenId[rinNumber] = tokenId;
+        _tokenDetails[tokenId] = RIN(tokenId, rinNumber, fileHash);
+
+        _mint(msg.sender, tokenId);
+        _setTokenURI(tokenId, metadataURI);
+
+        emit RINRegistered(tokenId, rinNumber, fileHash);
+    }
+
+    function approveRIN(uint256 tokenId) public onlyRole(APPROVER_ROLE) nonReentrant {
+        require(_exists(tokenId), "RINRegistration: Nonexistent token");
+        emit RINApproved(tokenId);
+    }
+
+    function addRole(bytes32 role, address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        grantRole(role, account);
+    }
+
+    function removeRole(bytes32 role, address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        revokeRole(role, account);
+    }
+
+    function validateRINData(string memory rinNumber) public view returns (bool) {
+        // TODO: Implement RIN data validation logic
+        return true;
+    }
+
+    function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) nonReentrant {
+        super._burn(tokenId);
+        delete _rinNumberToTokenId[_tokenDetails[tokenId].rinNumber];
+        delete _tokenDetails[tokenId];
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) nonReentrant {
+        require(!paused(), "RINRegistration: token transfer while paused");
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
+    // TODO: Implement upgradeability features
+    // TODO: Apply gas optimization techniques
+    // TODO: Enhance security features and error handling
+    // TODO: Implement comprehensive testing strategies
+}
