@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract RINEscrow is ReentrancyGuard {
+    IERC721 public rinTokenContract;
+    address public buyer;
+    address public seller;
+    address public arbitrator;
+    uint256 public rinTokenId;
+    bool public sellerConfirmation;
+    bool public buyerConfirmation;
+    uint256 public depositTime;
+    uint256 public constant TIMEOUT_PERIOD = 7 days; // Example timeout period
+
+    event EscrowInitiated(address indexed buyer, address indexed seller, uint256 indexed rinTokenId);
+    event TransactionConfirmed(uint256 rinTokenId);
+    event TransactionCancelled(uint256 rinTokenId);
+    event DisputeResolved(uint256 rinTokenId, bool refundedToBuyer);
+
+    modifier onlyBuyer() {
+        require(msg.sender == buyer, "Not the buyer");
+        _;
+    }
+
+    modifier onlySeller() {
+        require(msg.sender == seller, "Not the seller");
+        _;
+    }
+
+    modifier onlyArbitrator() {
+        require(msg.sender == arbitrator, "Not the arbitrator");
+        _;
+    }
+
+    constructor(address _rinTokenContract, address _seller, address _arbitrator, uint256 _rinTokenId) {
+        rinTokenContract = IERC721(_rinTokenContract);
+        buyer = msg.sender;
+        seller = _seller;
+        arbitrator = _arbitrator;
+        rinTokenId = _rinTokenId;
+
+        emit EscrowInitiated(buyer, seller, rinTokenId);
+    }
+
+    function initiateEscrow() external onlyBuyer nonReentrant {
+        rinTokenContract.transferFrom(msg.sender, address(this), rinTokenId);
+        depositTime = block.timestamp;
+    }
+
+    function confirmTransaction() external nonReentrant {
+        require(block.timestamp <= depositTime + TIMEOUT_PERIOD, "Transaction timeout");
+        if (msg.sender == buyer) {
+            buyerConfirmation = true;
+        } else if (msg.sender == seller) {
+            sellerConfirmation = true;
+        }
+
+        if (buyerConfirmation && sellerConfirmation) {
+            rinTokenContract.transferFrom(address(this), seller, rinTokenId);
+            emit TransactionConfirmed(rinTokenId);
+        }
+    }
+
+    function cancelTransaction() external onlyBuyer nonReentrant {
+        require(!sellerConfirmation, "Seller already confirmed");
+        require(block.timestamp <= depositTime + TIMEOUT_PERIOD, "Cancellation timeout");
+        rinTokenContract.transferFrom(address(this), buyer, rinTokenId);
+        emit TransactionCancelled(rinTokenId);
+    }
+
+    function resolveDispute(bool refundBuyer) external onlyArbitrator nonReentrant {
+        if (refundBuyer) {
+            rinTokenContract.transferFrom(address(this), buyer, rinTokenId);
+        } else {
+            rinTokenContract.transferFrom(address(this), seller, rinTokenId);
+        }
+        emit DisputeResolved(rinTokenId, refundBuyer);
+    }
+
+    function isTransactionTimedOut() public view returns (bool) {
+        return block.timestamp > depositTime + TIMEOUT_PERIOD;
+    }
+
+    // Additional functions and modifiers for contract upgradeability and data validation can be added here
+}
