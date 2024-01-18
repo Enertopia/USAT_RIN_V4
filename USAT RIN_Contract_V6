@@ -1,112 +1,64 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
-contract RINRegistration is AccessControlUpgradeable, PausableUpgradeable {
-    using SafeMathUpgradeable for uint256;
+contract RINRegistration is Initializable, ERC721Upgradeable, ERC721URIStorageUpgradeable, AccessControlUpgradeable, PausableUpgradeable {
+    using StringsUpgradeable for uint256;
 
     // Define roles
     bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
     bytes32 public constant APPROVER_ROLE = keccak256("APPROVER_ROLE");
 
-    struct Company {
-        string name;
-        address owner;
-        bool isApproved;
-    }
-
-    struct Facility {
-        string name;
-        uint256 companyId;
-        bool isApproved;
-    }
-
-    struct Agent {
-        string name;
-        address agentAddress;
-        uint256 companyId;
-        bool isApproved;
-    }
-
     struct RIN {
-        uint8 kCode;
-        uint16 year;
-        uint16 companyID;
-        uint16 facilityID;
-        uint32 batchNumber;
-        uint8 equivalenceCode;
-        uint8 renewableFuelCategory;
-        uint64 startBlock;
-        uint64 endBlock;
+        uint256 tokenId;
+        string rinNumber;
+        bytes32 fileHash; // SHA256 hash of the RIN file
     }
 
-    mapping(uint256 => Company) public companies;
-    mapping(uint256 => Facility) public facilities;
-    mapping(address => Agent) public agents;
+    mapping(string => uint256) private _rinNumberToTokenId;
+    mapping(uint256 => RIN) private _tokenDetails;
 
-    uint256 private _companyIds;
-    uint256 private _facilityIds;
-    uint256 private _version;
-
-    event CompanyRegistered(uint256 indexed companyId, string name, address owner);
-    event FacilityRegistered(uint256 indexed facilityId, string name, uint256 companyId);
-    event AgentRegistered(address indexed agentAddress, string name, uint256 companyId);
-    event CompanyApproved(uint256 indexed companyId);
-    event FacilityApproved(uint256 indexed facilityId);
-    event AgentApproved(address indexed agentAddress);
+    event RINRegistered(uint256 indexed tokenId, string rinNumber, bytes32 fileHash);
+    event RINApproved(uint256 indexed tokenId);
 
     function initialize() public initializer {
+        __ERC721_init("USAT RIN", "RIN");
+        __ERC721URIStorage_init();
         __AccessControl_init();
         __Pausable_init();
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(REGISTRAR_ROLE, msg.sender);
         _setupRole(APPROVER_ROLE, msg.sender);
-        _companyIds = 0;
-        _facilityIds = 0;
-        _version = 1;
     }
 
-    function registerCompany(string memory name) public onlyRole(REGISTRAR_ROLE) {
-        require(bytes(name).length > 0, "Invalid company name");
-        _companyIds = _companyIds.add(1);
-        companies[_companyIds] = Company(name, msg.sender, false);
-        emit CompanyRegistered(_companyIds, name, msg.sender);
+    function registerRIN(string memory rinNumber, string memory metadataURI, bytes32 fileHash) public onlyRole(REGISTRAR_ROLE) {
+        require(_rinNumberToTokenId[rinNumber] == 0, "RINRegistration: RIN already registered");
+
+        uint256 tokenId = totalSupply().add(1);
+        _rinNumberToTokenId[rinNumber] = tokenId;
+        _tokenDetails[tokenId] = RIN(tokenId, rinNumber, fileHash);
+
+        _mint(msg.sender, tokenId);
+        _setTokenURI(tokenId, metadataURI);
+
+        emit RINRegistered(tokenId, rinNumber, fileHash);
     }
 
-    function approveCompany(uint256 companyId) public onlyRole(APPROVER_ROLE) {
-        require(!companies[companyId].isApproved, "Company already approved");
-        companies[companyId].isApproved = true;
-        emit CompanyApproved(companyId);
+    function approveRIN(uint256 tokenId) public onlyRole(APPROVER_ROLE) {
+        require(_exists(tokenId), "RINRegistration: Nonexistent token");
+        // Additional approval logic can be implemented here
+        emit RINApproved(tokenId);
     }
 
-    function registerFacility(string memory name, uint256 companyId) public onlyRole(REGISTRAR_ROLE) {
-        require(bytes(name).length > 0, "Invalid facility name");
-        require(companies[companyId].owner == msg.sender, "Not the company owner");
-        _facilityIds = _facilityIds.add(1);
-        facilities[_facilityIds] = Facility(name, companyId, false);
-        emit FacilityRegistered(_facilityIds, name, companyId);
-    }
-
-    function approveFacility(uint256 facilityId) public onlyRole(APPROVER_ROLE) {
-        require(!facilities[facilityId].isApproved, "Facility already approved");
-        facilities[facilityId].isApproved = true;
-        emit FacilityApproved(facilityId);
-    }
-
-    function registerAgent(string memory name, uint256 companyId) public onlyRole(REGISTRAR_ROLE) {
-        require(bytes(name).length > 0, "Invalid agent name");
-        require(companies[companyId].owner == msg.sender, "Not the company owner");
-        agents[msg.sender] = Agent(name, msg.sender, companyId, false);
-        emit AgentRegistered(msg.sender, name, companyId);
-    }
-
-    function approveAgent(address agentAddress) public onlyRole(APPROVER_ROLE) {
-        require(!agents[agentAddress].isApproved, "Agent already approved");
-        agents[agentAddress].isApproved = true;
-        emit AgentApproved(agentAddress);
+    function getRINDetails(uint256 tokenId) public view returns (RIN memory) {
+        require(_exists(tokenId), "RINRegistration: Nonexistent token");
+        return _tokenDetails[tokenId];
     }
 
     function pause() public onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -117,20 +69,21 @@ contract RINRegistration is AccessControlUpgradeable, PausableUpgradeable {
         _unpause();
     }
 
-    function parseRIN(uint256 tokenId) public pure returns (RIN memory) {
-        // Logic to extract RIN components from tokenId
-        RIN memory rin;
-        // Assign values to rin struct
-        return rin;
+    function _burn(uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) {
+        super._burn(tokenId);
+        delete _rinNumberToTokenId[_tokenDetails[tokenId].rinNumber];
+        delete _tokenDetails[tokenId];
     }
 
-    function validateRIN(RIN memory rin) public pure returns (bool) {
-        // Implement validation logic based on RIN structure
-    }
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) {
+        super._beforeTokenTransfer(from, to, tokenId);
 
-    function getVersion() public view returns (uint256) {
-        return _version;
+        if (paused()) {
+            revert("RINRegistration: token transfer while paused");
+        }
     }
 
     // Additional functions for role management, upgradeability, and data validation
+    // Note: Comprehensive testing and documentation are essential for production readiness
 }
+
