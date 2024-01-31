@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+
+contract RINRegistration is Initializable, ERC721Upgradeable, ERC721URIStorageUpgradeable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+    using CountersUpgradeable for CountersUpgradeable.Counter;
+
+    bytes32 public constant REGISTRAR_ROLE = keccak256("REGISTRAR_ROLE");
+    bytes32 public constant APPROVER_ROLE = keccak256("APPROVER_ROLE");
+
+    struct RIN {
+        uint256 tokenId;
+        string rinNumber;
+        bytes32 fileHash;
+        address tbaAddress; // 0xcB3705b50773e95fCe6d3Fcef62B4d753aA0059d
+    }
+
+    CountersUpgradeable.Counter private _tokenIdCounter;
+    mapping(string => uint256) private _rinNumberToTokenId;
+    mapping(uint256 => RIN) private _tokenDetails;
+    mapping(uint256 => address) private _tokenTBA; // Mapping from tokenId to TBA address
+
+    event RINRegistered(uint256 indexed tokenId, string rinNumber, bytes32 fileHash, address tbaAddress);
+    event RINApproved(uint256 indexed tokenId);
+
+    function initialize() public initializer {
+        __ERC721_init("USAT RIN", "RIN");
+        __AccessControl_init();
+        __Pausable_init();
+        __ReentrancyGuard_init();
+
+        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(REGISTRAR_ROLE, _msgSender());
+        _setupRole(APPROVER_ROLE, _msgSender());
+
+        _tokenIdCounter.reset();
+    }
+
+    function registerRIN(string memory rinNumber, string memory metadataURI, bytes32 fileHash) public onlyRole(REGISTRAR_ROLE) {
+        require(_rinNumberToTokenId[rinNumber] == 0, "RIN already registered");
+        require(validateRINData(rinNumber), "Invalid RIN data");
+
+        _tokenIdCounter.increment();
+        uint256 tokenId = _tokenIdCounter.current();
+        address tbaAddress = _createTBA(tokenId);
+
+        _rinNumberToTokenId[rinNumber] = tokenId;
+        _tokenDetails[tokenId] = RIN(tokenId, rinNumber, fileHash, tbaAddress);
+        _tokenTBA[tokenId] = tbaAddress;
+
+        _mint(_msgSender(), tokenId);
+        _setTokenURI(tokenId, metadataURI);
+
+        emit RINRegistered(tokenId, rinNumber, fileHash, tbaAddress);
+    }
+
+    function _createTBA(uint256 tokenId) internal returns (address tbaAddress) {
+        // Simplified TBA creation logic
+        // In a real implementation, this could involve deploying a new contract or assigning an existing one
+        return address(uint160(tokenId + 0x1234)); // Mock TBA address, for illustration only
+    }
+
+    function validateRINData(string memory rinNumber) public pure returns (bool) {
+        // Placeholder for actual RIN validation logic
+        return bytes(rinNumber).length > 0;
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) {
+        super._beforeTokenTransfer(from, to, tokenId);
+        // Handle TBA transfer logic here if necessary
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721Upgradeable, ERC721URIStorageUpgradeable) {
+        super._burn(tokenId);
+        // Cleanup TBA or transfer assets as necessary
+        delete _tokenTBA[tokenId];
+    }
+
+    // Additional functions to interact with and manage TBAs
+}
